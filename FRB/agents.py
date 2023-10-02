@@ -78,72 +78,10 @@ class FactoredUCBAgent():
             ) / (self.n_pulls[i][self.last_pull[i]])
 
 
-class FactoredUCBAgentMM():
-    """
-    This class implements the FRB MM optimal algorithm in its anytime
-    version for bounded variables
-    """
-    def __init__(self, n_arms_vect, dim, time_horizon, sigma=0.5,
-                 max_reward=1, exploration_alpha=4):
-        self.n_arms_vect = n_arms_vect
-        self.dim = dim
-        self.T = time_horizon
-        assert self.dim == self.n_arms_vect.shape[0]
-        self.max_reward = max_reward
-        self.sigma = sigma
-        self.exploration_alpha = exploration_alpha
-        self.num_actions = np.prod(self.n_arms_vect)
-        self.action_matrix = np.zeros(
-            (self.num_actions, dim), dtype=int
-        )
-        for i in range(self.dim):
-            vect = -1 * np.ones(np.prod(self.n_arms_vect[:i+1]))
-            external_repeats = int(np.prod(self.n_arms_vect) / len(vect))
-            internal_repeats = max(1, int(np.prod(self.n_arms_vect[:i])))
-            for j in range(self.n_arms_vect[i]):
-                vect[j*internal_repeats:(j+1)*internal_repeats] = j
-            vect_new = np.copy(vect).reshape(-1, 1)
-            for _ in range(external_repeats-1):
-                vect_new = np.vstack((vect_new, vect.reshape(-1, 1)))
-            self.action_matrix[:, i] = vect_new.ravel()
-        self.reset()
+# HERE IT GOES THE FACTORED REWARD BANDITS
 
-    def reset(self):
-        self.t = 1
-        self.last_pull = None
-        self.n_pulls = []
-        self.observations = []
-        for size in self.n_arms_vect:
-            self.n_pulls.append(np.zeros(size, dtype=int))
-            self.observations.append(np.zeros((self.T, size), dtype=int))
-        return self
 
-    def pull_arm(self):
-        ucb = np.zeros(self.num_actions)
-        for i in range(self.num_actions):
-            action_vector = self.action_matrix[i, :]
-            n_min_pull = self.n_pulls[0][action_vector[0]]
-            for j in range(1, self.dim):
-                n_min_pull = min(n_min_pull, self.n_pulls[j][action_vector[j]])
-            virtual_pulls_sum = 0
-            for j in range(n_min_pull):
-                prod_var = 1
-                for h in range(self.dim):
-                    prod_var *= self.observations[h][j, self.last_pull[h]]
-                virtual_pulls_sum += prod_var
-            ucb[i] = virtual_pulls_sum / n_min_pull + self.sigma * np.sqrt(
-                self.exploration_alpha * math.log(self.t) / n_min_pull)
-        self.last_pull = self.action_matrix[int(np.argmax(ucb)), :]
-        return self.last_pull
 
-    def update(self, observations):
-        self.t += 1
-        for i in range(self.dim):
-            self.observations[i][self.n_pulls[i][self.last_pull[i]],
-                                self.last_pull[i]] = observations[i]
-            self.n_pulls[i][self.last_pull[i]] = \
-                self.n_pulls[i][self.last_pull[i]] + 1
-            
 
 # Code from Gianmarco for Heavy Tails Bandits
 

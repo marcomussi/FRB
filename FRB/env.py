@@ -2,7 +2,7 @@ import numpy as np
 
 class FactoredEnv():
     def __init__(self, n_arms_vect, dim, bounded=False, sigma=0.01,
-                 min_expected=0.3, max_expected=1, seed=0, verbose=True):
+                 min_expected=0.3, max_expected=1, seed=0, verbose=False):
         assert dim == n_arms_vect.shape[0]
         self.n_arms_vect = n_arms_vect
         self.dim = dim
