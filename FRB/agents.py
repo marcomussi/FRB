@@ -139,17 +139,36 @@ class RobustUCBAgent(Agent):
         self.n_pulls = np.zeros(self.n_arms, dtype=int)
 
 class TMRobustUCBAgent(RobustUCBAgent):
-    def __init__(self, n_arms, epsilon, u, *args, **kwargs):
+    def __init__(self, n_arms, epsilon, u, T, *args, **kwargs):
         super().__init__(n_arms, epsilon, u)
         self.v, self.c = 4*self.u**(1/(1+self.epsilon)), 0
+        self.T = T
         self.reset()
 
     def update(self, X):
         super().update(X)
         self.c = 2*np.log(self.t)
         for a in range(self.n_arms):
-            self.estimators[a] = np.mean(np.where(self.rewards[a]<= self.threshold_lookup(self.n_pulls[a]),
+            # self.estimators[a] = np.mean(np.where(np.abs(self.rewards[a])<= self.threshold_lookup(self.n_pulls[a]),
+            #                                       self.rewards[a], 0))
+            self.estimators[a] = np.mean(np.where(np.abs(self.rewards[a])<= self.threshold_lookup(self.t),
                                                   self.rewards[a], 0))
+            # self.estimators[a] = np.sum(np.where(np.abs(self.rewards[a]) <= self.threshold_lookup(self.t))) / self.n_pulls[a]
+            # self.estimators[a] = self.trimmed_mean(self.rewards[a], self.u, self.t, self.epsilon)
 
     def threshold_lookup(self, n):
-        return (self.u*n*0.25/np.log(self.t))**(1/(1+self.epsilon))
+        # return (self.u*n*0.25/np.log(self.T))**(1/(1+self.epsilon))
+        return (self.u*n/np.log(1/self.T))**(1/(1+self.epsilon))
+    
+    def trimmed_mean(self, x, u, delta, epsilon):
+        n = x.shape[0]
+        mask = np.zeros(x.shape)
+        _log = np.log(1/delta)
+        
+        t = np.arange(n)
+        mask = np.abs(x) <= (u*t - _log)**(1/(1+epsilon))
+        
+        mask = np.array(mask, dtype='bool')
+
+        mu = np.sum(x[mask]) / n
+        return mu
