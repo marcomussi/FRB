@@ -139,10 +139,9 @@ class RobustUCBAgent(Agent):
         self.n_pulls = np.zeros(self.n_arms, dtype=int)
 
 class TMRobustUCBAgent(RobustUCBAgent):
-    def __init__(self, n_arms, epsilon, u, T, *args, **kwargs):
+    def __init__(self, n_arms, epsilon, u, *args, **kwargs):
         super().__init__(n_arms, epsilon, u)
         self.v, self.c = 4*self.u**(1/(1+self.epsilon)), 0
-        self.T = T
         self.reset()
 
     def update(self, X):
@@ -157,8 +156,8 @@ class TMRobustUCBAgent(RobustUCBAgent):
             # self.estimators[a] = self.trimmed_mean(self.rewards[a], self.u, self.t, self.epsilon)
 
     def threshold_lookup(self, n):
-        # return (self.u*n*0.25/np.log(self.T))**(1/(1+self.epsilon))
-        return (self.u*n/np.log(1/self.T))**(1/(1+self.epsilon))
+        # return (self.u*n*0.25/np.log(self.t))**(1/(1+self.epsilon))
+        return (self.u*n/np.log(n**-2))**(1/(1+self.epsilon))
     
     def trimmed_mean(self, x, u, delta, epsilon):
         n = x.shape[0]
