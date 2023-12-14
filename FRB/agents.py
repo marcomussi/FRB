@@ -171,3 +171,124 @@ class TMRobustUCBAgent(RobustUCBAgent):
 
         mu = np.sum(x[mask]) / n
         return mu
+
+
+class TEA():
+    # Implementation of Algorithm 1 of "Factored Bandits" (Zimmert and Seldin, 2018)
+    def __init__(self, k, d):
+        self.k = k
+        self.d = d
+        self.reset()
+
+    def reset(self):
+        self.t = 1
+        self.T = np.array([0])
+        self.TEMs = []
+        for _ in range(self.d):
+            self.TEMs.append(TEM(self.k))
+
+    def update(self, observations):        
+        id = np.where(self.T == self.t)[0][0]
+        self.t += 1
+
+        self.observations[id] = observations
+
+        if self.t > self.T[-1]:
+            for i in range(self.d):
+                self.TEMs[i].feedback(self.observations)
+
+
+    def pull_arm(self):
+        if self.t > self.T[-1]:
+            self.update_schedule()
+
+        action = np.zeros(self.d, dtype=int)
+        id = np.where(self.T == self.t)[0][0]
+        for i in range(self.d):
+            action[i] = self.TEMs[i].action_schedule[id]
+
+        return action
+
+    def update_schedule(self):
+        values = np.zeros(self.d)
+
+        for i in range(self.d):
+            values[i] = len(self.TEMs[i].getActiveSet(1/TEA_f(self.t))) # 1 over f OR inverse of f??
+        
+        # M = np.argmax(values) + 1
+        M = int(np.max(values)) # max OR argmax??
+        self.T = np.arange(self.t, self.t + M)
+
+        for i in range(self.d):
+            self.TEMs[i].scheduleNext(M)
+
+        self.observations = np.zeros((M))
+
+
+class TEM():
+    # Implementation of Algorithm 3 of "Factored Bandits" (Zimmert and Seldin, 2018)
+    def __init__(self, K):
+        self.K = K
+        self.reset()
+    
+    def reset(self):
+        self.N = np.zeros((self.K,self.K))
+        self.D = np.zeros((self.K,self.K))
+        self.B = np.arange(self.K)
+        self.K_star = np.array([], dtype=int)
+        self.action_schedule = np.array([], dtype=int)
+
+    def getActiveSet(self, delta):
+        if (self.N == 0).any():
+            self.K_star = np.arange(self.K, dtype=int)
+        else:
+            self.K_star = np.array([], dtype=int)
+            for i in range(self.K):
+                mask = np.ones(self.K, dtype=bool)
+                mask[i] = 0
+
+                lcb = np.max((self.D[mask,i]/self.N[mask,i]) - np.sqrt((12 * np.log(2 * self.K * TEA_f(self.N[mask,i])) * 1/delta)/self.N[mask,i]))
+
+                if lcb <= 0:
+                    self.K_star = np.append(self.K_star, i)
+            
+            if len(self.K_star) == 0:
+                self.K_star = np.arange(self.K, dtype=int)
+            
+            self.B = np.intersect1d(self.B, self.K_star)
+
+            if len(self.B) == 0:
+                self.B = self.K_star
+
+        return self.K_star
+
+    def scheduleNext(self, T):
+        self.action_schedule = np.ones(T, dtype=int) * -1
+
+        for a in self.K_star:
+            t = np.random.choice(np.where(self.action_schedule == -1)[0])
+            self.action_schedule[t] = a
+        
+        while (self.action_schedule == -1).any():
+            for a in self.B:
+                if (self.action_schedule != -1).all():
+                    break
+
+                t = np.random.choice(np.where(self.action_schedule != -1)[0])
+                self.action_schedule[t] = a
+
+    def feedback(self, observations):
+        N = np.zeros(self.K)
+        R = np.zeros(self.K)
+
+        for t in range(len(observations)):
+            R[self.action_schedule[t]] += observations[t]
+            N[self.action_schedule[t]] += 1
+
+        for i in self.K_star:
+            for j in self.K_star:
+                self.D[i, j] = self.D[i, j] + np.min([N[i], N[j]]) * (R[i]/N[i] - R[j]/N[j])
+                self.N[i, j] = self.N[i, j] + np.min([N[i], N[j]])
+
+def TEA_f (t):
+    return (t+1) * (np.log(t+1))**2
