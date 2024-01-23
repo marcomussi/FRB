@@ -292,3 +292,40 @@ class TEM():
 
 def TEA_f (t):
     return (t+1) * (np.log(t+1))**2
+
+class MoMRobustUCBAgent:
+    
+    def __init__(self, n_arms, u, mult=1, *args, **kwargs):
+        self.n_arms = n_arms
+        self.u = u
+        self.mult = mult
+        self.v = np.sqrt(self.u)
+        self.e_sqrt_16 = np.exp(1/16)
+        self.reset()
+        
+    def pull_arm(self):
+        ucbs = self.estimators + self.mult * np.sqrt(12 * self.v * 32 * np.log(self.e_sqrt_16 * self.t) / self.n_pulls)
+        ucbs = np.nan_to_num(ucbs, nan=np.inf)
+        self.last_pull = np.random.choice(np.where(ucbs == ucbs.max())[0])
+        self.n_pulls[self.last_pull] += 1
+        self.t += 1
+        return self.last_pull
+    
+    def update(self, X):
+        self.rewards[self.last_pull] = np.append(self.rewards[self.last_pull], X)
+        self.c = 2+32*np.log(self.t)
+        for a in range(self.n_arms):
+            k = max(int(min(self.c, self.n_pulls[a])/2), 1)
+            N = int(self.n_pulls[a]/k)
+            self.estimators[a] = np.median([np.mean(chunk) for chunk in np.array_split(self.rewards[a][:N*k], k)])
+
+    
+    def threshold_lookup(self, n):
+        return np.sqrt(self.u * n / (-2 * np.log(self.t)))
+    
+    def reset(self):
+        self.t = 1
+        self.last_pull = None
+        self.rewards = [np.array([]) for i in range(self.n_arms)]
+        self.estimators = np.ones(self.n_arms)*np.inf
+        self.n_pulls = np.zeros(self.n_arms, dtype=int)
