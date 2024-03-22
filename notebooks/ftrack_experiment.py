@@ -127,15 +127,15 @@ for d in d_list:
         # F-UCB
         plt.plot(T_vec, np.mean(fucb_regret, axis=0)[T_vec-1], label=fucb, marker='x')
         plt.fill_between(T_vec,
-                         np.mean(fucb_regret, axis=0)[T_vec-1] - 1.96*np.std(fucb_regret, axis=0)[T_vec-1]/np.sqrt(n_trials),
-                         np.mean(fucb_regret, axis=0)[T_vec-1] + 1.96*np.std(fucb_regret, axis=0)[T_vec-1]/np.sqrt(n_trials),
+                         np.mean(fucb_regret, axis=0)[T_vec-1] - np.std(fucb_regret, axis=0)[T_vec-1]/np.sqrt(n_trials),
+                         np.mean(fucb_regret, axis=0)[T_vec-1] + np.std(fucb_regret, axis=0)[T_vec-1]/np.sqrt(n_trials),
                          alpha=0.3)
         
         # F-Track
         plt.plot(T_vec, np.mean(ftrack_regret, axis=0), label=ftrack, marker='x')
         plt.fill_between(T_vec,
-                         np.mean(ftrack_regret, axis=0) - 1.96*np.std(ftrack_regret, axis=0)/np.sqrt(n_trials),
-                         np.mean(ftrack_regret, axis=0) + 1.96*np.std(ftrack_regret, axis=0)/np.sqrt(n_trials),
+                         np.mean(ftrack_regret, axis=0) - np.std(ftrack_regret, axis=0)/np.sqrt(n_trials),
+                         np.mean(ftrack_regret, axis=0) + np.std(ftrack_regret, axis=0)/np.sqrt(n_trials),
                          alpha=0.3)
         
         plt.legend()

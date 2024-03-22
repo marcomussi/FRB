@@ -340,7 +340,7 @@ class FtrackAgent():
         self.sigma = sigma
         self.T = T
         self.c = c
-        self.N0 = 10 * int(np.ceil(np.sqrt(np.log(T))))
+        self.N0 = int(np.ceil(np.sqrt(np.log(T))))
         self.eps = np.sqrt(2 * (sigma ** 2) * self._ft(1/np.log(T), c) / self.N0)
         self.exploration_alpha = 4
         self.schedule = False
