@@ -41,11 +41,13 @@ class FactoredEnv():
         return self.avg_reward
 
 class ParallelFactoredEnv():
-    def __init__(self, k, d, num_trials, sigma=0.01, min_expected=0.3, max_expected=1):
+    def __init__(self, k, d, num_trials, sigma=0.01, min_expected=0.3, max_expected=1, seed=0):
         self.d = d
         self.num_trials = num_trials
         self.sigma=sigma
         self.d_vect = np.linspace(0, d-1, d, dtype=int)
+        self.seed = seed
+        np.random.seed(self.seed)
         self.avg_reward = np.random.uniform(min_expected, max_expected, (self.num_trials, self.d, k))
     
     def step(self, trial, action):
