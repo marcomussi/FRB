@@ -329,3 +329,103 @@ class MoMRobustUCBAgent:
         self.rewards = [np.array([]) for i in range(self.n_arms)]
         self.estimators = np.ones(self.n_arms)*np.inf
         self.n_pulls = np.zeros(self.n_arms, dtype=int)
+
+class FtrackAgent():
+    """
+    This class implements F-track
+    """
+    def __init__(self, k, d, sigma, T, c):
+        self.k = k
+        self.d = d
+        self.sigma = sigma
+        self.T = T
+        self.c = c
+        self.N0 = 10 * int(np.ceil(np.sqrt(np.log(T))))
+        self.eps = np.sqrt(2 * (sigma ** 2) * self._ft(1/np.log(T), c) / self.N0)
+        self.exploration_alpha = 4
+        self.schedule = False
+        self.reset()
+
+    def reset(self):
+        self.t = 0
+        self.last_pull = None
+        self.avg_reward = np.zeros((self.d, self.k))
+        self.n_pulls = np.zeros((self.d, self.k), dtype=int)
+        self.ftrack = True
+        return self
+
+    def pull_arm(self):
+        if(self.t < self.N0*self.k): 
+            self.last_pull = (self.t % self.k) * np.ones(self.d, dtype=int)
+        else:
+            if self.schedule == False:
+                self._create_schedule()
+        
+            if self.ftrack and np.max(np.abs(self.avg_rewards_warmup-self.avg_reward)) <= 2 * self.eps:
+                self._pull_arm_ftrack()
+            else:
+                if self.track:
+                    print(f"Switched to F-UCB at step {self.t}")
+                self.ftrack = False
+                self._pull_arm_fucb()
+            
+        for i in range(self.d):
+            self.n_pulls[i, self.last_pull[i]] = self.n_pulls[i, self.last_pull[i]] + 1
+
+        return self.last_pull
+    
+    def _pull_arm_ftrack(self):
+        finished = self.action_vects_num == self.action_vects_num_pulled
+        self.action_vects_num_pulled[finished] = np.inf
+        to_pull = np.argmin(self.action_vects_num_pulled)
+        self.last_pull = self.action_vects[to_pull]
+        self.action_vects_num_pulled[to_pull] = self.action_vects_num_pulled[to_pull] + 1
+    
+    def _pull_arm_fucb(self):
+        self.last_pull = -1 * np.ones(self.d, dtype=int)
+        for i in range(self.d):
+            ucb1 = [self.avg_reward[i, a] + self.sigma * np.sqrt(
+                self.exploration_alpha * np.log(self.t) / self.n_pulls[i, a]) for a in range(self.k)]
+            self.last_pull[i] = int(np.argmax(ucb1))
+
+    def update(self, observations):
+        self.t += 1
+        for i in range(self.d):
+            self.avg_reward[i, self.last_pull[i]] = (
+                self.avg_reward[i, self.last_pull[i]] *
+                (self.n_pulls[i, self.last_pull[i]] - 1) + observations[i]
+            ) / (self.n_pulls[i, self.last_pull[i]])
+    
+    def _ft(self, delta, c):
+        return (1 + 1 / np.log(self.T)) * (c * np.log(np.log(self.T)) + np.log(1/delta))
+    
+    def _create_schedule(self):
+        self.avg_rewards_warmup = np.copy(self.avg_reward)
+        max_val = np.max(self.avg_rewards_warmup, axis=1).reshape(self.d, 1)
+        max_idx = np.argmax(self.avg_rewards_warmup, axis=1)
+        deltas = max_val - self.avg_rewards_warmup
+        self.pulls_todo = np.zeros((self.d, self.T - self.N0*self.k), dtype=int)
+        ft = self._ft(1/self.T, self.c)
+        for i in range(self.d):
+            self.pulls_todo[i, :] = max_idx[i]
+            N = np.ceil(2 * (self.sigma ** 2) * ft / (deltas[i, :] ** 2)).astype(int)
+            order = np.argsort(N)
+            N_ordered = N[order]
+            counter = 0
+            for j in range(self.k-1):
+                self.pulls_todo[i, counter:counter + N_ordered[j]] = order[j]
+                counter += N_ordered[j]
+        self.action_vects = []
+        self.action_vects_num = []
+        for i in range(self.T - self.N0*self.k):
+            if (i == 0):
+                self.action_vects.append(self.pulls_todo[:, 0])
+                self.action_vects_num.append(1)
+            if np.array_equal(self.pulls_todo[:, i], self.action_vects[-1]):
+                self.action_vects_num[-1] = self.action_vects_num[-1] + 1
+            else:
+                self.action_vects.append(self.pulls_todo[:, i])
+                self.action_vects_num.append(1)
+        self.action_vects_num_pulled = list(np.zeros(len(self.action_vects_num)))     
+        self.schedule = True
+        
