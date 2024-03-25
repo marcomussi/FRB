@@ -77,8 +77,14 @@ fucb = '\\JPAalgnameshort'
 ftrack = '\\stellina'
 algs = [fucb, ftrack]
 
-k_list = [int(sys.argv[1])]
-d_list = [int(sys.argv[2])]
+# k_list = [int(sys.argv[1])]
+k_list = sys.argv[1].split(',')
+k_list = np.array([int(i) for i in k_list])
+
+# d_list = [int(sys.argv[2])]
+d_list = sys.argv[2].split(',')
+d_list = np.array([int(i) for i in d_list])
+
 T_min = int(sys.argv[3])
 T_max = int(sys.argv[4])
 T_step = int(sys.argv[5])
@@ -87,8 +93,10 @@ parallel_workers = int(sys.argv[7])
 n_trials = int(sys.argv[8])
 out_folder = str(sys.argv[9])
 
+timestamp = f'{datetime.datetime.now():%Y%m%d_%H%M%S}'
+
 if not os.path.exists(out_folder):
-    os.makedirs(os.path.join('./', out_folder))
+    os.makedirs(os.path.join('./', out_folder, timestamp))
 
 for d in d_list:
     for k in k_list:
@@ -144,6 +152,6 @@ for d in d_list:
         plt.xlabel('Rounds')
         plt.ylabel('Regret')
         plt.title('k={} d={} $\sigma$={}'.format(k, d, sigma))
-        save_str = out_folder + f'ftrack_T{T_max}_k{k}_d{d}_{datetime.datetime.now():%Y-%m-%d_%H%M%S}'
+        save_str = out_folder + timestamp + f'/ftrack_T{T_max}_k{k}_d{d}'
         plt.savefig(save_str + '.png')
-        tkz.save(save_str + '.tex')
+        # tkz.save(save_str + '.tex')
