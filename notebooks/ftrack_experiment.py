@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import tikzplotlib as tkz
 import os, sys
 import time
+import datetime
 from copy import deepcopy
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import warnings
@@ -86,10 +87,11 @@ parallel_workers = int(sys.argv[7])
 n_trials = int(sys.argv[8])
 out_folder = str(sys.argv[9])
 
+if not os.path.exists(out_folder):
+    os.makedirs(os.path.join('./', out_folder))
+
 for d in d_list:
     for k in k_list:
-        out_path = out_folder + 'ftrack_out' + str(k) + '_' + str(d) + '.txt'
-
         env = ParallelFactoredEnv(k, d, n_trials, sigma)
 
         # F-UCB
@@ -107,10 +109,10 @@ for d in d_list:
         fucb_regret = np.cumsum(fucb_regret, axis=1)
 
         # F-Track
-        ftrack_regret = np.zeros((n_trials, int((T_max - T_min) / T_step + 1)))
         T_vec = np.append(np.arange(T_min, T_max, T_step, dtype=int), T_max)
+        ftrack_regret = np.zeros((n_trials, len(T_vec)))
 
-        for i, T in enumerate(T_vec):
+        for j, T in enumerate(T_vec):
             agent_ftrack = FtrackAgent(k, d, sigma, T, c=2.5)
             args = [(deepcopy(agent_ftrack), deepcopy(env), T, i) for i in range(n_trials)]
             inst_regret_ftrack = []
@@ -119,7 +121,7 @@ for d in d_list:
                 for result in executor.map(run_trial_ftrack, args):
                     inst_regret_ftrack.append(result)
 
-            ftrack_regret[:, i] = np.sum(np.array(inst_regret_ftrack), axis=1)
+            ftrack_regret[:, j] = np.sum(np.array(inst_regret_ftrack), axis=1)
 
         plt.figure()
         subsample = 50
@@ -142,6 +144,6 @@ for d in d_list:
         plt.xlabel('Rounds')
         plt.ylabel('Regret')
         plt.title('k={} d={} $\sigma$={}'.format(k, d, sigma))
-        save_str = out_folder + 'ftrack_k{}_d{}'.format(k, d)
+        save_str = out_folder + f'ftrack_T{T_max}_k{k}_d{d}_{datetime.datetime.now():%Y-%m-%d_%H%M%S}'
         plt.savefig(save_str + '.png')
         tkz.save(save_str + '.tex')
