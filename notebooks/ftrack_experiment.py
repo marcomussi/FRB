@@ -154,4 +154,4 @@ for d in d_list:
         plt.title('k={} d={} $\sigma$={}'.format(k, d, sigma))
         save_str = out_folder + timestamp + f'/ftrack_T{T_max}_k{k}_d{d}'
         plt.savefig(save_str + '.png')
-        # tkz.save(save_str + '.tex')
+        tkz.save(save_str + '.tex')
