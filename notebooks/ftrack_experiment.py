@@ -72,6 +72,60 @@ def run_trial_ftrack(arg):
     print('F-Track: Ended run {} (T={}). Elapsed time: {:.2f}s.\n'.format(trial, T, end-start), end='')
     return result
 
+def lower_bound(env, T, trial):
+    avg_reward = env.avg_reward[trial, :, :]
+    max_val = np.max(avg_reward, axis=1).reshape(env.d, 1)
+    max_idx = np.argmax(avg_reward, axis=1)
+    deltas = max_val - avg_reward
+    print("True deltas")
+    print(deltas)
+    pulls_todo = np.zeros((env.d, T), dtype=int)
+
+    for i in range(env.d):
+        pulls_todo[i, :] = max_idx[i]
+        N = np.ceil(2 * (env.sigma ** 2) * np.log(T) / (deltas[i, :] ** 2)).astype(int)
+        order = np.flip(np.argsort(N))
+        N_ordered = N[order]
+        counter = 0
+        for j in range(env.k-1):
+            pulls_todo[i, counter:counter + N_ordered[j]] = order[j]
+            counter += N_ordered[j]
+    action_vects = []
+    action_vects_num = []
+    expected_reward = []
+    for i in range(T):
+        if (i == 0):
+            action_vects.append(pulls_todo[:, 0])
+            action = action_vects[-1]
+            exp_r = 1
+            for j in range(env.d):
+                exp_r *= avg_reward[j, action[j]]
+            expected_reward.append(exp_r)
+            action_vects_num.append(1)
+        if np.array_equal(pulls_todo[:, i], action_vects[-1]):
+            action_vects_num[-1] = action_vects_num[-1] + 1
+        else:
+            action_vects.append(pulls_todo[:, i])
+            action = action_vects[-1]
+            exp_r = 1
+            for j in range(env.d):
+                exp_r *= avg_reward[j, action[j]]
+            expected_reward.append(exp_r)
+            action_vects_num.append(1)
+
+    expected_reward = np.array(expected_reward)
+    action_vects_num = np.array(action_vects_num)
+    optimal_reward = np.max(expected_reward)
+
+    action_regret = optimal_reward - expected_reward
+
+    print("Actions")
+    print(action_vects)
+    print("True N")
+    print(action_vects_num)
+
+    return np.dot(action_regret, action_vects_num)
+
 # BASIC SETTING FOR EXPERIMENTS
 fucb = '\\JPAalgnameshort'
 ftrack = '\\stellina'
@@ -89,18 +143,42 @@ T_min = int(sys.argv[3])
 T_max = int(sys.argv[4])
 T_step = int(sys.argv[5])
 sigma = float(sys.argv[6])
-parallel_workers = int(sys.argv[7])
-n_trials = int(sys.argv[8])
-out_folder = str(sys.argv[9])
+alpha = float(sys.argv[7])
+parallel_workers = int(sys.argv[8])
+n_trials = int(sys.argv[9])
+out_folder = str(sys.argv[10])
+
+# # DEBUG
+# k_list = [2]
+# d_list = [10]
+# T_min = 10000
+# T_max = 10000
+# T_step = 1000
+# sigma = 0.0
+# alpha = 0
+# parallel_workers = 1
+# n_trials = 1
+# out_folder = "./results/"
 
 timestamp = f'{datetime.datetime.now():%Y%m%d_%H%M%S}'
 
+out_folder = os.path.join(out_folder, timestamp)
+
 if not os.path.exists(out_folder):
-    os.makedirs(os.path.join('./', out_folder, timestamp))
+    os.makedirs(os.path.join('./', out_folder))
 
 for d in d_list:
     for k in k_list:
-        env = ParallelFactoredEnv(k, d, n_trials, sigma)
+        # env = ParallelFactoredEnv(k=k, d=d, num_trials=n_trials, sigma=0.0, alpha=alpha)
+        env = ParallelFactoredEnv(k=k, d=d, num_trials=n_trials, sigma=sigma, alpha=alpha)
+
+        T_vec = np.append(np.arange(T_min, T_max, T_step, dtype=int), T_max)
+        ftrack_regret = np.zeros((n_trials, len(T_vec)))
+
+        # regret_lbs = np.zeros((n_trials, len(T_vec)))
+        # for trial in range(n_trials):
+        #     for i, T in enumerate(T_vec):
+        #         regret_lbs[trial, i] = lower_bound(env=env, T=T, trial=trial)
 
         # F-UCB
         arms_vect = k * np.ones(d, dtype=int)
@@ -117,9 +195,6 @@ for d in d_list:
         fucb_regret = np.cumsum(fucb_regret, axis=1)
 
         # F-Track
-        T_vec = np.append(np.arange(T_min, T_max, T_step, dtype=int), T_max)
-        ftrack_regret = np.zeros((n_trials, len(T_vec)))
-
         for j, T in enumerate(T_vec):
             agent_ftrack = FtrackAgent(k, d, sigma, T, c=2.5)
             args = [(deepcopy(agent_ftrack), deepcopy(env), T, i) for i in range(n_trials)]
@@ -130,6 +205,12 @@ for d in d_list:
                     inst_regret_ftrack.append(result)
 
             ftrack_regret[:, j] = np.sum(np.array(inst_regret_ftrack), axis=1)
+
+        # Save data
+        save_name_fucb = f"/data_fucb_T{T_max}_k{k}_d{d}_alpha{alpha}"
+        save_name_ftrack = f"/data_ftrack_T{T_max}_k{k}_d{d}_alpha{alpha}"
+        np.save(out_folder+save_name_fucb, fucb_regret)
+        np.save(out_folder+save_name_ftrack, ftrack_regret)
 
         plt.figure()
         subsample = 50
@@ -148,10 +229,17 @@ for d in d_list:
                          np.mean(ftrack_regret, axis=0) + np.std(ftrack_regret, axis=0)/np.sqrt(n_trials),
                          alpha=0.3)
         
-        plt.legend()
+        # # Lower Bounds
+        # plt.plot(T_vec, np.mean(regret_lbs, axis=0), label='lower bound', marker='x')
+        # plt.fill_between(T_vec,
+        #                  np.mean(regret_lbs, axis=0) - np.std(regret_lbs, axis=0)/np.sqrt(n_trials),
+        #                  np.mean(regret_lbs, axis=0) + np.std(regret_lbs, axis=0)/np.sqrt(n_trials),
+        #                  alpha=0.3)
+        
+        # plt.legend()
         plt.xlabel('Rounds')
         plt.ylabel('Regret')
-        plt.title('k={} d={} $\sigma$={}'.format(k, d, sigma))
-        save_str = out_folder + timestamp + f'/ftrack_T{T_max}_k{k}_d{d}'
+        plt.title('k={} d={} $\sigma$={} $alpha$={}'.format(k, d, sigma, alpha))
+        save_str = out_folder + f'/ftrack_T{T_max}_k{k}_d{d}_alpha{alpha}'
         plt.savefig(save_str + '.png')
         tkz.save(save_str + '.tex')

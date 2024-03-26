@@ -340,8 +340,10 @@ class FtrackAgent():
         self.sigma = sigma
         self.T = T
         self.c = c
-        self.N0 = int(np.ceil(np.sqrt(np.log(T))))
-        self.eps = np.sqrt(2 * (sigma ** 2) * self._ft(1/np.log(T), c) / self.N0)
+        self.N0 = 3*int(np.ceil(np.sqrt(np.log(T))))
+        self.eps = np.sqrt(2 * (sigma ** 2) * self._ft(1/np.log(T), c) / (self.N0*6))
+        print("Epsilon")
+        print(self.eps)
         self.exploration_alpha = 4
         self.schedule = False
         self.reset()
@@ -364,7 +366,7 @@ class FtrackAgent():
             if self.ftrack and np.max(np.abs(self.avg_rewards_warmup-self.avg_reward)) <= 2 * self.eps:
                 self._pull_arm_ftrack()
             else:
-                if self.track:
+                if self.ftrack:
                     print(f"Switched to F-UCB at step {self.t}")
                 self.ftrack = False
                 self._pull_arm_fucb()
@@ -375,8 +377,17 @@ class FtrackAgent():
         return self.last_pull
     
     def _pull_arm_ftrack(self):
-        finished = self.action_vects_num == self.action_vects_num_pulled
-        self.action_vects_num_pulled[finished] = np.inf
+        finished = self.action_vects_num_pulled >= self.action_vects_num
+        try:
+            self.action_vects_num_pulled[finished] = np.inf
+            # self.action_vects_num_pulled[self.action_vects_num >= self.action_vects_num_pulled] = np.inf
+        except Exception as e:
+            print(e)
+            print(self.action_vects)
+            print(self.action_vects_num)
+            print(self.action_vects_num_pulled)
+            print(finished)
+            raise e
         to_pull = np.argmin(self.action_vects_num_pulled)
         self.last_pull = self.action_vects[to_pull]
         self.action_vects_num_pulled[to_pull] = self.action_vects_num_pulled[to_pull] + 1
@@ -404,12 +415,14 @@ class FtrackAgent():
         max_val = np.max(self.avg_rewards_warmup, axis=1).reshape(self.d, 1)
         max_idx = np.argmax(self.avg_rewards_warmup, axis=1)
         deltas = max_val - self.avg_rewards_warmup
+        print("Est. deltas")
+        print(deltas)
         self.pulls_todo = np.zeros((self.d, self.T - self.N0*self.k), dtype=int)
         ft = self._ft(1/self.T, self.c)
         for i in range(self.d):
             self.pulls_todo[i, :] = max_idx[i]
             N = np.ceil(2 * (self.sigma ** 2) * ft / (deltas[i, :] ** 2)).astype(int)
-            order = np.argsort(N)
+            order = np.flip(np.argsort(N))
             N_ordered = N[order]
             counter = 0
             for j in range(self.k-1):
@@ -426,6 +439,11 @@ class FtrackAgent():
             else:
                 self.action_vects.append(self.pulls_todo[:, i])
                 self.action_vects_num.append(1)
-        self.action_vects_num_pulled = list(np.zeros(len(self.action_vects_num)))     
+        self.action_vects_num = np.array(self.action_vects_num)
+        self.action_vects_num_pulled = np.zeros(len(self.action_vects_num))
         self.schedule = True
+        print("Actions")
+        print(self.action_vects)
+        print("Est. N")
+        print(self.action_vects_num)
         
