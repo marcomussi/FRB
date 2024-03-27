@@ -143,7 +143,9 @@ T_min = int(sys.argv[3])
 T_max = int(sys.argv[4])
 T_step = int(sys.argv[5])
 sigma = float(sys.argv[6])
-alpha = float(sys.argv[7])
+# alpha = float(sys.argv[7])
+alpha_list = sys.argv[7].split(',')
+alpha_list = np.array([float(i) for i in alpha_list])
 parallel_workers = int(sys.argv[8])
 n_trials = int(sys.argv[9])
 out_folder = str(sys.argv[10])
@@ -169,77 +171,75 @@ if not os.path.exists(out_folder):
 
 for d in d_list:
     for k in k_list:
-        # env = ParallelFactoredEnv(k=k, d=d, num_trials=n_trials, sigma=0.0, alpha=alpha)
-        env = ParallelFactoredEnv(k=k, d=d, num_trials=n_trials, sigma=sigma, alpha=alpha)
+        for alpha in alpha_list:
+            env = ParallelFactoredEnv(k=k, d=d, num_trials=n_trials, sigma=sigma, alpha=alpha)
 
-        T_vec = np.append(np.arange(T_min, T_max, T_step, dtype=int), T_max)
-        ftrack_regret = np.zeros((n_trials, len(T_vec)))
+            T_vec = np.append(np.arange(T_min, T_max, T_step, dtype=int), T_max)
+            ftrack_regret = np.zeros((n_trials, len(T_vec)))
 
-        # regret_lbs = np.zeros((n_trials, len(T_vec)))
-        # for trial in range(n_trials):
-        #     for i, T in enumerate(T_vec):
-        #         regret_lbs[trial, i] = lower_bound(env=env, T=T, trial=trial)
+            # regret_lbs = np.zeros((n_trials, len(T_vec)))
+            # for trial in range(n_trials):
+            #     for i, T in enumerate(T_vec):
+            #         regret_lbs[trial, i] = lower_bound(env=env, T=T, trial=trial)
 
-        # F-UCB
-        arms_vect = k * np.ones(d, dtype=int)
-        agent_fucb = FactoredUCBAgent(arms_vect, d, sigma)
+            # F-UCB
+            arms_vect = k * np.ones(d, dtype=int)
+            agent_fucb = FactoredUCBAgent(arms_vect, d, sigma)
 
-        args = [(deepcopy(agent_fucb), deepcopy(env), T_max, i) for i in range(n_trials)]
-        inst_regret_fucb = []
-
-        with ProcessPoolExecutor(max_workers=parallel_workers) as executor:
-            for result in executor.map(run_trial_fucb, args):
-                inst_regret_fucb.append(result)
-
-        fucb_regret = np.array(inst_regret_fucb)
-        fucb_regret = np.cumsum(fucb_regret, axis=1)
-
-        # F-Track
-        for j, T in enumerate(T_vec):
-            agent_ftrack = FtrackAgent(k, d, sigma, T, c=2.5)
-            args = [(deepcopy(agent_ftrack), deepcopy(env), T, i) for i in range(n_trials)]
-            inst_regret_ftrack = []
+            args = [(deepcopy(agent_fucb), deepcopy(env), T_max, i) for i in range(n_trials)]
+            inst_regret_fucb = []
 
             with ProcessPoolExecutor(max_workers=parallel_workers) as executor:
-                for result in executor.map(run_trial_ftrack, args):
-                    inst_regret_ftrack.append(result)
+                for result in executor.map(run_trial_fucb, args):
+                    inst_regret_fucb.append(result)
 
-            ftrack_regret[:, j] = np.sum(np.array(inst_regret_ftrack), axis=1)
+            fucb_regret = np.array(inst_regret_fucb)
+            fucb_regret = np.cumsum(fucb_regret, axis=1)
 
-        # Save data
-        save_name_fucb = f"/data_fucb_T{T_max}_k{k}_d{d}_alpha{alpha}"
-        save_name_ftrack = f"/data_ftrack_T{T_max}_k{k}_d{d}_alpha{alpha}"
-        np.save(out_folder+save_name_fucb, fucb_regret)
-        np.save(out_folder+save_name_ftrack, ftrack_regret)
+            # F-Track
+            for j, T in enumerate(T_vec):
+                agent_ftrack = FtrackAgent(k, d, sigma, T, c=2.5)
+                args = [(deepcopy(agent_ftrack), deepcopy(env), T, i) for i in range(n_trials)]
+                inst_regret_ftrack = []
 
-        plt.figure()
-        subsample = 50
-        assert T % subsample == 0
-        # F-UCB
-        plt.plot(T_vec, np.mean(fucb_regret, axis=0)[T_vec-1], label=fucb, marker='x')
-        plt.fill_between(T_vec,
-                         np.mean(fucb_regret, axis=0)[T_vec-1] - np.std(fucb_regret, axis=0)[T_vec-1]/np.sqrt(n_trials),
-                         np.mean(fucb_regret, axis=0)[T_vec-1] + np.std(fucb_regret, axis=0)[T_vec-1]/np.sqrt(n_trials),
-                         alpha=0.3)
-        
-        # F-Track
-        plt.plot(T_vec, np.mean(ftrack_regret, axis=0), label=ftrack, marker='x')
-        plt.fill_between(T_vec,
-                         np.mean(ftrack_regret, axis=0) - np.std(ftrack_regret, axis=0)/np.sqrt(n_trials),
-                         np.mean(ftrack_regret, axis=0) + np.std(ftrack_regret, axis=0)/np.sqrt(n_trials),
-                         alpha=0.3)
-        
-        # # Lower Bounds
-        # plt.plot(T_vec, np.mean(regret_lbs, axis=0), label='lower bound', marker='x')
-        # plt.fill_between(T_vec,
-        #                  np.mean(regret_lbs, axis=0) - np.std(regret_lbs, axis=0)/np.sqrt(n_trials),
-        #                  np.mean(regret_lbs, axis=0) + np.std(regret_lbs, axis=0)/np.sqrt(n_trials),
-        #                  alpha=0.3)
-        
-        # plt.legend()
-        plt.xlabel('Rounds')
-        plt.ylabel('Regret')
-        plt.title('k={} d={} $\sigma$={} $alpha$={}'.format(k, d, sigma, alpha))
-        save_str = out_folder + f'/ftrack_T{T_max}_k{k}_d{d}_alpha{alpha}'
-        plt.savefig(save_str + '.png')
-        tkz.save(save_str + '.tex')
+                with ProcessPoolExecutor(max_workers=parallel_workers) as executor:
+                    for result in executor.map(run_trial_ftrack, args):
+                        inst_regret_ftrack.append(result)
+
+                ftrack_regret[:, j] = np.sum(np.array(inst_regret_ftrack), axis=1)
+
+            # Save data
+            save_name_fucb = f"/data_fucb_T{T_max}_k{k}_d{d}_alpha{alpha}"
+            save_name_ftrack = f"/data_ftrack_T{T_max}_k{k}_d{d}_alpha{alpha}"
+            np.save(out_folder+save_name_fucb, fucb_regret)
+            np.save(out_folder+save_name_ftrack, ftrack_regret)
+
+            plt.figure()
+            # F-UCB
+            plt.plot(T_vec, np.mean(fucb_regret, axis=0)[T_vec-1], label=fucb, marker='x')
+            plt.fill_between(T_vec,
+                            np.mean(fucb_regret, axis=0)[T_vec-1] - np.std(fucb_regret, axis=0)[T_vec-1]/np.sqrt(n_trials),
+                            np.mean(fucb_regret, axis=0)[T_vec-1] + np.std(fucb_regret, axis=0)[T_vec-1]/np.sqrt(n_trials),
+                            alpha=0.3)
+            
+            # F-Track
+            plt.plot(T_vec, np.mean(ftrack_regret, axis=0), label=ftrack, marker='x')
+            plt.fill_between(T_vec,
+                            np.mean(ftrack_regret, axis=0) - np.std(ftrack_regret, axis=0)/np.sqrt(n_trials),
+                            np.mean(ftrack_regret, axis=0) + np.std(ftrack_regret, axis=0)/np.sqrt(n_trials),
+                            alpha=0.3)
+            
+            # # Lower Bounds
+            # plt.plot(T_vec, np.mean(regret_lbs, axis=0), label='lower bound', marker='x')
+            # plt.fill_between(T_vec,
+            #                  np.mean(regret_lbs, axis=0) - np.std(regret_lbs, axis=0)/np.sqrt(n_trials),
+            #                  np.mean(regret_lbs, axis=0) + np.std(regret_lbs, axis=0)/np.sqrt(n_trials),
+            #                  alpha=0.3)
+            
+            # plt.legend()
+            plt.xlabel('Rounds')
+            plt.ylabel('Regret')
+            plt.title('k={} d={} $\sigma$={} $alpha$={}'.format(k, d, sigma, alpha))
+            save_str = out_folder + f'/ftrack_T{T_max}_k{k}_d{d}_alpha{alpha}'
+            plt.savefig(save_str + '.png')
+            tkz.save(save_str + '.tex')

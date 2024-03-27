@@ -340,8 +340,8 @@ class FtrackAgent():
         self.sigma = sigma
         self.T = T
         self.c = c
-        self.N0 = 3*int(np.ceil(np.sqrt(np.log(T))))
-        self.eps = np.sqrt(2 * (sigma ** 2) * self._ft(1/np.log(T), c) / (self.N0*6))
+        self.N0 = int(np.ceil(np.sqrt(np.log(T))))
+        self.eps = np.sqrt(2 * (sigma ** 2) * self._ft(1/np.log(T), c) / (self.N0))
         print("Epsilon")
         print(self.eps)
         self.exploration_alpha = 4
@@ -378,16 +378,7 @@ class FtrackAgent():
     
     def _pull_arm_ftrack(self):
         finished = self.action_vects_num_pulled >= self.action_vects_num
-        try:
-            self.action_vects_num_pulled[finished] = np.inf
-            # self.action_vects_num_pulled[self.action_vects_num >= self.action_vects_num_pulled] = np.inf
-        except Exception as e:
-            print(e)
-            print(self.action_vects)
-            print(self.action_vects_num)
-            print(self.action_vects_num_pulled)
-            print(finished)
-            raise e
+        self.action_vects_num_pulled[finished] = np.inf
         to_pull = np.argmin(self.action_vects_num_pulled)
         self.last_pull = self.action_vects[to_pull]
         self.action_vects_num_pulled[to_pull] = self.action_vects_num_pulled[to_pull] + 1
@@ -421,7 +412,9 @@ class FtrackAgent():
         ft = self._ft(1/self.T, self.c)
         for i in range(self.d):
             self.pulls_todo[i, :] = max_idx[i]
-            N = np.ceil(2 * (self.sigma ** 2) * ft / (deltas[i, :] ** 2)).astype(int)
+            N = np.ceil(2 * (self.sigma ** 2) * ft / (deltas[i, :] ** 2)).astype(int) #- self.N0
+            # mask = N < 0
+            # N[mask] = 0
             order = np.flip(np.argsort(N))
             N_ordered = N[order]
             counter = 0
